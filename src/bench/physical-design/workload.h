@@ -15,6 +15,8 @@ enum StorageInterface {
   CLS_FULL_INLINE_IDX, // cls with inline index (NOTE: no epoch guard)
   CLS_NO_INDEX_WRONLY, // cls equiv with wronly flag
   CLS_NO_INDEX_WRONLY_XTN, // cls equiv with added 12 byte append
+
+  LIBRADOS_APPEND_CHECK_EPOCH_HEADER,
 };
 
 /*

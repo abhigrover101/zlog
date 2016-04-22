@@ -75,6 +75,8 @@ int main(int argc, char **argv)
     interface = CLS_NO_INDEX_WRONLY;
   } else if (interface_name == "cls_no_index_wronly_xtn") {
     interface = CLS_NO_INDEX_WRONLY_XTN;
+  } else if (interface_name == "librados_append_check_epoch_header") {
+    interface = LIBRADOS_APPEND_CHECK_EPOCH_HEADER;
   } else {
     std::cerr << "invalid storage interface " << interface_name << std::endl;
     return -1;
@@ -230,7 +232,8 @@ int main(int argc, char **argv)
         interface != CLS_CHECK_EPOCH &&
         interface != CLS_CHECK_EPOCH_HDR &&
         interface != CLS_FULL &&
-        interface != CLS_FULL_HDR_IDX) {
+        interface != CLS_FULL_HDR_IDX &&
+        interface != LIBRADOS_APPEND_CHECK_EPOCH_HEADER) {
       std::cerr << "experiment stream/n1/append: doesn't support interface "
         << interface_name << std::endl;
       return -1;
@@ -240,7 +243,8 @@ int main(int argc, char **argv)
         (interface == CLS_CHECK_EPOCH ||
          interface == CLS_CHECK_EPOCH_HDR ||
          interface == CLS_FULL ||
-         interface == CLS_FULL_HDR_IDX)) {
+         interface == CLS_FULL_HDR_IDX ||
+         interface == LIBRADOS_APPEND_CHECK_EPOCH_HEADER)) {
       std::cerr << "cannot use stripe groups and objects that need init" << std::endl;
       return -1;
     }

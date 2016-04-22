@@ -409,25 +409,36 @@ class ByteStreamN1Append_Workload : public Workload {
         interface_ == CLS_CHECK_EPOCH ||
         interface_ == CLS_CHECK_EPOCH_HDR ||
         interface_ == CLS_FULL ||
-        interface_ == CLS_FULL_HDR_IDX);
+        interface_ == CLS_FULL_HDR_IDX ||
+        interface_ == LIBRADOS_APPEND_CHECK_EPOCH_HEADER);
 
     // init objects
     if (interface_ == CLS_CHECK_EPOCH ||
         interface_ == CLS_CHECK_EPOCH_HDR ||
         interface_ == CLS_FULL ||
-        interface_ == CLS_FULL_HDR_IDX) {
+        interface_ == CLS_FULL_HDR_IDX ||
+        interface_ == LIBRADOS_APPEND_CHECK_EPOCH_HEADER) {
       assert(!use_stripe_group_);
       std::cout << "initializing objects..." << std::endl;
       for (int i = 0; i < stripe_width_; i++) {
         std::stringstream oid;
         oid << prefix_ << "log_bytestreamN1append." << i;
         librados::ObjectWriteOperation op;
-        if (interface_ == CLS_CHECK_EPOCH_HDR || interface_ == CLS_FULL_HDR_IDX)
+        if (interface_ == CLS_CHECK_EPOCH_HDR || interface_ == CLS_FULL_HDR_IDX) {
           zlog_bench::cls_zlog_bench_append_hdr_init(op);
-        else
+          int ret = ioctx_->operate(oid.str(), &op);
+          assert(ret == 0);
+        } else if (interface_ == LIBRADOS_APPEND_CHECK_EPOCH_HEADER) {
+          ceph::bufferlist bl;
+          char buf[8192];
+          bl.append(buf, sizeof(buf));
+          int ret = ioctx_->write_full(oid.str(), bl);
+          assert(ret == 0);
+        } else {
           zlog_bench::cls_zlog_bench_append_init(op);
-        int ret = ioctx_->operate(oid.str(), &op);
-        assert(ret == 0);
+          int ret = ioctx_->operate(oid.str(), &op);
+          assert(ret == 0);
+        }
       }
     }
   }
@@ -517,6 +528,15 @@ class ByteStreamN1Append_Workload : public Workload {
         librados::ObjectWriteOperation op;
         zlog_bench::cls_zlog_bench_append_sim_hdr_idx(op, 123, seq, bl);
         int ret = ioctx_->aio_operate(oid.str(), rc, &op);
+        assert(ret == 0);
+      }
+      break;
+
+    case LIBRADOS_APPEND_CHECK_EPOCH_HEADER:
+      {
+        //int ret = ioctx_->aio_append(oid.str(), rc, bl, bl.length());
+        int ret = ioctx_->aio_zlog_append_check_epoch_header(oid.str(), rc,
+            100, bl, bl.length());
         assert(ret == 0);
       }
       break;
