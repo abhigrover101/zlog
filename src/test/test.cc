@@ -112,11 +112,11 @@ TEST_F(LibZlog, Delete) {
   ret = log->Delete();
   ASSERT_EQ(ret, 0);
 
-  //as long as user has the pointer to log he can still append to it.
+  //as long as user has the pointer to log he can append to it even after deletion.
   log->Append(Slice("test"),&pos);
   ASSERT_EQ(tail, pos);
 
-  //as long as user has the pointer to log he can still read from it.
+  //as long as user has the pointer to log he can read from it even after deletion.
   std::string entry;
   ret = log->Read(0,&entry);
   ASSERT_EQ(entry, "test1");
@@ -131,6 +131,9 @@ TEST_F(LibZlog, Delete) {
   ASSERT_NE(log, nullptr);
     
   ret = log->Append(Slice("after deletion"),&pos);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(pos, (uint64_t)0);
+  
   ret = log->Read(0,&entry);
   ASSERT_EQ(entry, "after deletion");
   delete log;

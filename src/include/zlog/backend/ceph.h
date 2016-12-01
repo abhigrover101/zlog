@@ -71,7 +71,6 @@ class CephBackend : public Backend {
     ceph::bufferlist bl;
     librados::ObjectReadOperation op;
     zlog::cls_zlog_get_latest_projection(op, &rv, epoch, &bl);
-
     // run operation
     ceph::bufferlist unused;
     int ret = ioctx_->operate(oid, &op, &unused);
@@ -192,6 +191,11 @@ class CephBackend : public Backend {
   virtual int AioRead(const std::string& oid, uint64_t epoch,
       uint64_t position, std::string *data, void *arg,
       std::function<void(void*, int)> callback);
+
+  virtual int Delete(const std::string& oid) {
+      int ret = ioctx_->remove(oid);
+      return zlog_rv(ret);
+  }
 
  private:
   static void aio_safe_cb_append(librados::completion_t cb, void *arg);

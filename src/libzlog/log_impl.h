@@ -137,6 +137,7 @@ class LogImpl : public Log {
   std::string metalog_oid_;
   SeqrClient *seqr;
   std::string backup_node_uid_;
+  std::string backup_name_;
 
   Backend *new_backend;
 #if BACKEND_SUPPORT_DISABLE

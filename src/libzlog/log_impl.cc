@@ -38,7 +38,10 @@ std::string LogImpl::metalog_oid_from_name(const std::string& name)
 std::string LogImpl::backup_node_from_uid_name(const std::string& name, const uint64_t &uid)
 {
   std::stringstream ss;
-  ss << uid <<'.'<< name << ".node";
+  std::string sUid = std::to_string(uid);
+  if(name.compare(0,sUid.length(), sUid)==0)
+    return name;
+  ss << uid <<'.'<< name;
   return ss.str();
 }
 
@@ -70,8 +73,9 @@ int Log::CreateWithStripeWidth(Backend *backend, const std::string& name,
       << ret << " (" << strerror(-ret) << ")" << std::endl;
     return ret;
   }
-  
-  std::string backup_node_uid = LogImpl::backup_node_from_uid_name(name, uid);
+    
+  std::string backup_name = LogImpl::backup_node_from_uid_name(name, uid);
+  std::string backup_node_uid = LogImpl::metalog_oid_from_name(backup_name);
   ret = backend->CreateHeadObject(backup_node_uid, hist_data);
   if (ret != Backend::ZLOG_OK) {
     std::cerr << "Failed to create backup node " << name << " ret "
@@ -86,6 +90,7 @@ int Log::CreateWithStripeWidth(Backend *backend, const std::string& name,
   impl->metalog_oid_ = metalog_oid;
   impl->seqr = seqr;
   impl->mapper_.SetName(name + '.' +std::to_string(uid));
+  impl->backup_name_ = backup_name;
   impl->backup_node_uid_ = backup_node_uid;
 
   ret = impl->RefreshProjection();
@@ -149,7 +154,8 @@ int Log::Open(Backend *backend, const std::string& name,
   impl->metalog_oid_ = metalog_oid;
   impl->seqr = seqr;
   impl->mapper_.SetName(name + '.' +std::to_string(uid));
-  impl->backup_node_uid_ = LogImpl::backup_node_from_uid_name(name, uid);
+  impl->backup_name_ = LogImpl::backup_node_from_uid_name(name, uid);
+  impl->backup_node_uid_ = LogImpl::metalog_oid_from_name(impl->backup_name_);
 
   ret = impl->RefreshProjection();
   if (ret) {
@@ -470,7 +476,7 @@ int LogImpl::CheckTail(uint64_t *pposition, bool increment)
 {
   for (;;) {
     int ret = seqr->CheckTail(mapper_.Epoch(), new_backend->pool(),
-        backup_node_uid_, pposition, increment);
+        backup_name_, pposition, increment);
     if (ret == -EAGAIN) {
       //std::cerr << "check tail ret -EAGAIN" << std::endl;
       sleep(1);
@@ -500,7 +506,7 @@ int LogImpl::CheckTail(std::vector<uint64_t>& positions, size_t count)
   for (;;) {
     std::vector<uint64_t> result;
     int ret = seqr->CheckTail(mapper_.Epoch(), new_backend->pool(),
-      backup_node_uid_, result, count);
+      backup_name_, result, count);
     if (ret == -EAGAIN) {
       //std::cerr << "check tail ret -EAGAIN" << std::endl;
       sleep(1);
@@ -525,7 +531,7 @@ int LogImpl::CheckTail(const std::set<uint64_t>& stream_ids,
 {
   for (;;) {
     int ret = seqr->CheckTail(mapper_.Epoch(), new_backend->pool(),
-        backup_node_uid_, stream_ids, stream_backpointers, pposition, increment);
+        backup_name_, stream_ids, stream_backpointers, pposition, increment);
     if (ret == -EAGAIN) {
       //std::cerr << "check tail ret -EAGAIN" << std::endl;
       sleep(1);
