@@ -4,6 +4,8 @@
  * executable. It would be nice avoid this using some gtest advanced features!
  */
 
+#include<thread>
+
 struct aio_state {
   zlog::AioCompletion *c;
   uint64_t position;
@@ -176,6 +178,58 @@ TEST_F(LibZlog, GarbageCollector) {
   ASSERT_EQ(ret, -ENOENT);
  
   delete log;
+}
+
+
+void append(zlog::Log *log, std::string log_name){
+  uint64_t pos;
+  for(uint64_t i = 0; i < 10; i++){
+    int ret = log->Append(Slice(log_name+"."+"test"+std::to_string(i)),&pos);
+    ASSERT_EQ(ret, 0);
+  }
+  return;
+}
+
+void del(zlog::Log *log){
+  int ret = log->Delete();
+  ASSERT_EQ(ret, 0);
+  return;
+}
+
+void master(Backend *be, zlog::SeqrClient *client){
+  zlog::Log *log[10];
+  for(int i=0;i<10;i++){
+    std::string name = "mylog"+std::to_string(i);
+    int ret = zlog::Log::Create(be, name, client, &log[i]);
+    ASSERT_EQ(ret, 0);
+  }
+
+  std::thread appending[10];
+  std::thread deleting[10];
+  
+  for(int i=0;i<10;i++){
+    std::string name = "mylog"+std::to_string(i);
+    appending[i] = std::thread(append, &(*log[i]), name);
+    deleting[i] = std::thread(del, &(*log[i]));
+  }
+  for(int i=0;i<10;i++){
+    appending[i].join();
+    deleting[i].join();
+  }
+  std::string entry;
+  for(int i=0;i<10;i++){
+    for(int j=0;j<10;j++){
+      int ret = log[i]->Read(j,&entry);
+      ASSERT_EQ(ret, 0);
+      ASSERT_EQ(entry, "mylog"+std::to_string(i)+".test"+std::to_string(j));
+    }
+  }
+  return;
+}
+
+TEST_F(LibZlog, ConcurrentDelete) {
+  std::thread parent(master, be, client);
+  parent.join();
 }
 
 TEST_F(LibZlog, Open) {
