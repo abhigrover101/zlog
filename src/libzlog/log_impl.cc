@@ -36,6 +36,18 @@ std::string LogImpl::metalog_oid_from_name(const std::string& name)
 int Log::CreateWithStripeWidth(Backend *backend, const std::string& name,
     SeqrClient *seqr, int stripe_size, Log **logptr)
 {
+  Log *logTable=NULL;
+  int ret=0;
+  if(name!="logTable"){
+    ret = Open(backend, "logTable", seqr, &logTable);
+    if(ret != Backend::ZLOG_OK){
+      ret = Create(backend, "logTable", seqr, &logTable);
+      if(ret != Backend::ZLOG_OK){
+        std::cerr<<"Log Table now found"<<std::endl;
+      }
+    }
+  }
+
   if (stripe_size <= 0) {
     std::cerr << "Invalid stripe size (" << stripe_size << " <= 0)" << std::endl;
     return -EINVAL;
@@ -46,14 +58,41 @@ int Log::CreateWithStripeWidth(Backend *backend, const std::string& name,
     return -EINVAL;
   }
 
+  std::string new_name = name;
+
+
+  //find version for log
+  if(logTable!=NULL && seqr!=NULL){
+    uint64_t logTableTail;
+    ret = logTable->CheckTail(&logTableTail);
+    uint64_t i=0;
+    uint64_t version = 0;
+    for(i = 0;i < logTableTail; i++){
+      std::string entry;
+      ret=logTable->Read(i, &entry);
+      if(entry.compare(0, name.length()+1, name + '.')){
+        version = stoi(entry.substr(name.length()+1));
+      }
+    }
+    new_name = name + '.'+std::to_string(version);
+    ret = backend->Exists(LogImpl::metalog_oid_from_name(new_name));
+    if(ret)
+      version++;
+    else{
+      std::cerr << "Failed to create log " << name << ". Already Exists." << std::endl;
+    }
+    new_name = name + '.'+std::to_string(version);
+    ret = logTable->Append(Slice(new_name), &logTableTail);
+  }
+
   // Setup the first projection
   StripeHistory hist;
   hist.AddStripe(0, 0, stripe_size);
   const auto hist_data = hist.Serialize();
 
   // create the log metadata/head object
-  std::string metalog_oid = LogImpl::metalog_oid_from_name(name);
-  int ret = backend->CreateHeadObject(metalog_oid, hist_data);
+  std::string metalog_oid = LogImpl::metalog_oid_from_name(new_name);
+  ret = backend->CreateHeadObject(metalog_oid, hist_data);
   if (ret != Backend::ZLOG_OK) {
     std::cerr << "Failed to create log " << name << " ret "
       << ret << " (" << strerror(-ret) << ")" << std::endl;
@@ -63,10 +102,10 @@ int Log::CreateWithStripeWidth(Backend *backend, const std::string& name,
   LogImpl *impl = new LogImpl;
 
   impl->new_backend = backend;
-  impl->name_ = name;
+  impl->name_ = new_name;
   impl->metalog_oid_ = metalog_oid;
   impl->seqr = seqr;
-  impl->mapper_.SetName(name);
+  impl->mapper_.SetName(new_name);
 
   ret = impl->RefreshProjection();
   if (ret) {
@@ -92,13 +131,42 @@ int Log::Open(Backend *backend, const std::string& name,
     std::cerr << "Invalid log name (empty string)" << std::endl;
     return -EINVAL;
   }
+  std::string new_name = name;
+
+  Log *logTable=NULL;
+  int ret=0;
+  if(name!="logTable"){
+    ret = Open(backend, "logTable", seqr, &logTable);
+    if(ret != Backend::ZLOG_OK){
+      ret = Create(backend, "logTable", seqr, &logTable);
+      if(ret != Backend::ZLOG_OK){
+        std::cerr<<"Log Table now found"<<std::endl;
+      }
+    }
+  }
+
+  //find version for log
+  if(logTable!=NULL && seqr!=NULL){
+    uint64_t logTableTail;
+    ret = logTable->CheckTail(&logTableTail);
+    uint64_t i=0;
+    uint64_t version = 0;
+    for(i = 0;i < logTableTail; i++){
+      std::string entry;
+      ret=logTable->Read(i, &entry);
+      if(entry.compare(0, name.length()+1, name + '.')){
+        version = stoi(entry.substr(name.length()+1));
+      }
+    }
+    new_name = name + '.'+std::to_string(version);
+  }
 
   /*
    * Check that the log metadata/head object exists. The projection and other
    * state is read during RefreshProjection.
    */
-  std::string metalog_oid = LogImpl::metalog_oid_from_name(name);
-  int ret = backend->Exists(metalog_oid);
+  std::string metalog_oid = LogImpl::metalog_oid_from_name(new_name);
+  ret = backend->Exists(metalog_oid);
   if (ret) {
     std::cerr << "Failed to open log meta object " << metalog_oid << " ret " <<
       ret << std::endl;
@@ -108,10 +176,10 @@ int Log::Open(Backend *backend, const std::string& name,
   LogImpl *impl = new LogImpl;
 
   impl->new_backend = backend;
-  impl->name_ = name;
+  impl->name_ = new_name;
   impl->metalog_oid_ = metalog_oid;
   impl->seqr = seqr;
-  impl->mapper_.SetName(name);
+  impl->mapper_.SetName(new_name);
 
   ret = impl->RefreshProjection();
   if (ret) {
@@ -398,6 +466,18 @@ int LogImpl::Seal(const std::vector<std::string>& objects,
   *next_pos = max_position;
 
   return 0;
+}
+
+int LogImpl::Delete(){
+  for (;;) {
+  //deleting the metalog object
+    int ret = new_backend->Delete(metalog_oid_);
+    if (ret < 0) {
+      std::cerr << "delete failed ret " << ret << std::endl;
+    }
+    return ret;
+  }
+  assert(0);
 }
 
 int LogImpl::RefreshProjection()

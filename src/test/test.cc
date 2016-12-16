@@ -79,6 +79,8 @@ TEST_F(LibZlog, Create) {
   int ret = zlog::Log::Create(be, "", NULL, &log);
   ASSERT_EQ(ret, -EINVAL);
   ASSERT_EQ(log, nullptr);
+  ret = zlog::Log::Create(be, "mylog1", client, &log);
+  ret = zlog::Log::Create(be, "mylog2", client, &log);
 
   // TODO: creating a log with NULL seqclient should be an error
   ret = zlog::Log::Create(be, "mylog", NULL, &log);
